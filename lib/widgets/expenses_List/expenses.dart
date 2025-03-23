@@ -1,127 +1,226 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-
-import '../expenses_list.dart';
+import 'dart:convert';
 import '../../models/expenseModel.dart';
+import '../chart/chart.dart';
+import '../expenses_list.dart';
 
 class Expenses extends StatefulWidget {
   const Expenses({Key? key}) : super(key: key);
 
   @override
-  State<Expenses> createState() {
-    return _ExpnsesState();
-  }
+  State<Expenses> createState() => _ExpensesState();
 }
-TextEditingController ExpTitle=TextEditingController();
-TextEditingController ExpAmt=TextEditingController();
-DateTime? selectedDate;
-Category selectedCategory=Category.leisure;
 
-class _ExpnsesState extends State<Expenses>{
-  final List<ExpenseData> _registeredExpenses=[
-    ExpenseData(title: 'Burger and Pizza',amount:19.99, date: DateTime.now(), category: Category.food,),
-    ExpenseData(title: 'Cinema',amount:120.9, date: DateTime.now(), category: Category.leisure,),
-  ];
+class _ExpensesState extends State<Expenses> {
+  final List<ExpenseData> _registeredExpenses = [];
+  TextEditingController expTitle = TextEditingController();
+  TextEditingController expAmt = TextEditingController();
+  DateTime? selectedDate;
+  Category selectedCategory = Category.leisure;
 
-  void getDatePicker()async{
-    final now=DateTime.now();
-    final firstDate=DateTime(1997,now.month,now.day);
-    selectedDate=await showDatePicker(context: context,initialDate:now,
-        firstDate:firstDate , lastDate: now);
-    print("seeenffnfr;;;;;;......${selectedDate}");
-  }
   @override
-  void dispose(){
-    ExpTitle.dispose();
-    ExpAmt.dispose();
+  void initState() {
+    super.initState();
+    // _loadExpenses(); // Load expenses on startup
+  }
+
+  @override
+  void dispose() {
+    expTitle.dispose();
+    expAmt.dispose();
     super.dispose();
   }
 
-  @override
-  void _addExpenses(){
-    showModalBottomSheet(context: context,
-        builder: (BuildContext context) {
-      return Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column( crossAxisAlignment:CrossAxisAlignment.start,
-            children:[
 
-          TextField(controller:ExpTitle,
-              maxLength:50,
-              decoration:InputDecoration(label:Text("Title"))),
-          Row(
-            children: [
-              Flexible(
-                child: TextField(controller:ExpAmt,keyboardType:TextInputType.number,
-                    decoration:InputDecoration(label:Text("Amount",),prefixText:"₹",)),
-              ),
-              SizedBox(width:16),
-              Flexible(
-                child: InkWell(onTap:getDatePicker,
-                    child: Row(
-                        crossAxisAlignment:CrossAxisAlignment.end,
-                        mainAxisAlignment:MainAxisAlignment.end,
-                    children:[
-                  Padding(
-                    padding: const EdgeInsets.only(right:20.0),
-                    child: Text('${selectedDate!=null?formatter.format(selectedDate!):"selectedDate"}'),
-                  ),
-                    Icon(Icons.calendar_month),
-                ])),
-              )
-            ],
-          ),
-        DropdownButton(
-          value:selectedCategory,
-          items: Category.values.map((category)=>
-              DropdownMenuItem(
-          value:category,
-            child:
-        Text(category.name.toUpperCase()))).toList(),
-          onChanged: (value) {
-          if(value==null){
-            return;
-          }
-          setState((){
-            selectedCategory=value;
-          });
-          },),
-          Row(
-            crossAxisAlignment:CrossAxisAlignment.center,
-            mainAxisAlignment:MainAxisAlignment.spaceAround,
-            children: [
-              ElevatedButton(onPressed:(){
-                print("${ExpTitle.text}");
-                print("${ExpAmt.text}");
-                print("${selectedDate}");
-                ExpTitle.clear();
-                ExpAmt.clear();
-              },child:Text('Save')),
 
-              ElevatedButton(onPressed:(){
-                Navigator.of(context).pop();
-              },child:Text('Cancel')),
-            ],
-          )
-          // ])
-        ]),
+  // Function to submit expense
+  void submitExpense() {
+    final amt = double.tryParse(expAmt.text);
+    if (expTitle.text.trim().isEmpty || amt == null || amt <= 0 || selectedDate == null) {
+      showDialog(
+        context: context,
+        builder: (BuildContext context) => AlertDialog(
+          title: const Text("Invalid input"),
+          content: const Text("Please fill all the required data!!!"),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text("Ok"),
+            ),
+          ],
+        ),
       );
-        });
+      return;
+    }
 
+    setState(() {
+      _registeredExpenses.add(
+        ExpenseData(title: expTitle.text, amount: amt, date: selectedDate!, category: selectedCategory),
+      );
+
+    });
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Success'),backgroundColor:Colors.green,));
+
+    // _saveExpenses(); // Save to local storage
+
+    Navigator.pop(context);
+    expTitle.clear();
+    expAmt.clear();
+    selectedDate = null;
   }
-@override
-  Widget build(BuildContext context){
-  return Scaffold(appBar:AppBar(title:Text("Expense Tracker"),actions:[
-    IconButton(icon:Icon(Icons.add),onPressed:_addExpenses),
-  ]),
-      body:Center(child:Column(
-    crossAxisAlignment:CrossAxisAlignment.center,
-    mainAxisAlignment:MainAxisAlignment.center,
-    children: [
+  void _addExpenses() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (BuildContext context) {
+        Category modalCategory = selectedCategory;
+        DateTime? modalSelectedDate = selectedDate; // Local state for modal
+        return StatefulBuilder(
+            builder: (BuildContext modalContext, StateSetter setModalState) {
+              return Container(
+                height: MediaQuery.of(context).size.height, // Full screen height
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16.0, 48, 16, 16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      TextField(
+                        controller: expTitle,
+                        maxLength: 50,
+                        decoration: const InputDecoration(labelText: "Title"),
+                      ),
+                      Row(
+                        children: [
+                          Flexible(
+                            child: TextField(
+                              controller: expAmt,
+                              keyboardType: TextInputType.number,
+                              decoration: const InputDecoration(
+                                  labelText: "Amount", prefixText: "₹"),
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Flexible(
+                            child: InkWell(
+                              onTap: () async {
+                                final pickedDate = await showDatePicker(
+                                  context: modalContext,
+                                  initialDate: DateTime.now(),
+                                  firstDate: DateTime(1997, DateTime.now().month, DateTime.now().day),
+                                  lastDate: DateTime.now(),
+                                );
+                                if (pickedDate != null) {
+                                  setModalState(() {
+                                    modalSelectedDate = pickedDate;
+                                  });
+                                  // Update the main state's selectedDate
+                                  setState(() {
+                                    selectedDate = pickedDate;
+                                  });
+                                }
+                              },
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.center,
+                                children: [
+                                  Padding(
+                                    padding: const EdgeInsets.only(right: 20.0),
+                                    child: Text(
+                                        '${modalSelectedDate != null
+                                            ? formatter.format(modalSelectedDate!)
+                                            : "Select Date"}'),
+                                  ),
+                                  const Icon(Icons.calendar_month),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      DropdownButton<Category>(
+                        value: modalCategory, // Use modal state
+                        onChanged: (Category? newValue) {
+                          if (newValue != null) {
+                            setModalState(() {
+                              modalCategory = newValue; // Update inside modal state
+                            });
+                            // Update the main state's selectedCategory
+                            setState(() {
+                              selectedCategory = newValue;
+                            });
+                            print("Selected in modal: $modalCategory");
+                          }
+                        },
+                        items: Category.values.map((category) {
+                          return DropdownMenuItem(
+                            value: category,
+                            child: Text(category.name.toUpperCase()),
+                          );
+                        }).toList(),
+                      ),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceAround,
+                        children: [
+                          ElevatedButton(
+                              onPressed: submitExpense, child: const Text('Save')),
+                          ElevatedButton(onPressed: () =>
+                              Navigator.of(context).pop(), child: const Text('Cancel')),
+                        ],
+                      )
+                    ],
+                  ),
+                ),
+              );
+            });
+      },
+    );
+  }
+  void _removeExpenses(ExpenseData expense){
+    final expIndex=_registeredExpenses.indexOf(expense);
+    setState((){
+      _registeredExpenses.remove(expense);
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(duration:Duration(seconds:3),backgroundColor:Colors.red,
+            content:Text("Expense Deleted"),action:SnackBarAction(label: 'Undo', onPressed: () {
+              setState((){
+                _registeredExpenses.insert(expIndex,expense);
 
-      Flexible(child: expense_list(expenses: _registeredExpenses,)),
-    ],
-  )));
+              });
+            },)));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text("Expense Tracker"),
+        actions: [IconButton(icon: const Icon(Icons.add), onPressed: _addExpenses)],
+      ),
+      body: _registeredExpenses.isEmpty
+          ? Center(
+            child: const Text(
+                    "Please add some data",
+                    style: TextStyle(fontSize: 16),
+                  ),
+          )
+          :Center(
+        child:
+        // Column(
+        //   crossAxisAlignment: CrossAxisAlignment.center,
+        //   mainAxisAlignment: MainAxisAlignment.center,
+        //   children: [
+        //     Expanded(child: ExpenseList(expenses: _registeredExpenses, onremove: _removeExpenses)),
+        //   ],
+        // ),
+        Column(
+          children: [
+            Chart(expenses: _registeredExpenses),
+            Expanded(child: ExpenseList(expenses: _registeredExpenses, onremove: _removeExpenses)),
+          ],
+        ),
+      ),
+    );
+  }
 }
-  }
-
